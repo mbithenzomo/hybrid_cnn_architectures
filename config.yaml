@@ -1,0 +1,21 @@
+training:
+  batch_size: 256
+  epochs: 25
+  patience: 5
+
+cv:
+  k_folds: 5
+
+data:
+  leads: [0, 1]
+  num_workers: 8
+
+paths:
+  raw_data_dir: "data/raw"
+  proc_data_dir: "data/datasets"
+  ml_results_dir: "ml/outputs/results"
+  ml_logs_dir: "ml/outputs/logs"
+  ml_outputs_dir: "ml/outputs"
+
+random_seed: 42
+valid_dataset_names: ["iridia_af", "afdb"]
