@@ -1,0 +1,4 @@
+*.DS_Store
+*.gitkeep
+*.pyc
+__pycache__
