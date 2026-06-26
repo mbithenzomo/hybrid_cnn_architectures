@@ -18,7 +18,7 @@ from ml.utils.training import get_device, get_evaluation_metrics, get_prediction
 config = load_config()
 RESULTS_DIR = config["paths"]["ml_results_dir"]
 VALID_DATASET_NAMES = config["valid_dataset_names"]
-VALID_MODELS = ["cnn", "cnn_bigru", "cnn_bilstm", "cnn_transf"]
+VALID_MODELS = config["valid_models"]
 
 
 def test_model(model_path, model_type, test_loader, filename, source_dataset):

@@ -19,3 +19,4 @@ paths:
 
 random_seed: 42
 valid_dataset_names: ["iridia_af", "afdb"]
+valid_models: ["cnn", "cnn_bigru", "cnn_bilstm", "cnn_transf"]

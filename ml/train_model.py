@@ -45,7 +45,7 @@ PATIENCE = config["training"]["patience"]
 RANDOM_SEED = config["random_seed"]
 RESULTS_DIR = config["paths"]["ml_results_dir"]
 VALID_DATASET_NAMES = config["valid_dataset_names"]
-VALID_MODELS = ["cnn", "cnn_bigru", "cnn_bilstm", "cnn_transf"]
+VALID_MODELS = config["valid_models"]
 
 
 torch.manual_seed(RANDOM_SEED)
@@ -127,7 +127,7 @@ def get_model(model_type, device, base_out_channels, base_kernel_size, adaptive_
   
     return model.to(device)
 
-def train_model(filename, dataset_name, model_type, dataset_id, cv_mode="kfold", num_runs=1, balance_train=True, folds_to_run=None, balance_all=False, finetune=False, finetune_head_epochs=5, finetune_lr_factor=0.1):
+def train_model(filename, dataset_name, model_type, dataset_id, cv_mode="kfold", num_runs=1, balance_train=True, folds_to_run=None, balance_all=False, finetune=False, finetune_head_epochs=5, finetune_lr_factor=0.1, source_dataset="iridia_af"):
     """
     Args:
         filename (str): Name of the dataset CSV file
@@ -147,6 +147,7 @@ def train_model(filename, dataset_name, model_type, dataset_id, cv_mode="kfold",
         finetune (bool): If True, fine-tune from pretrained model instead of training from scratch. Defaults to False.
         finetune_head_epochs (int): Number of epochs to train head-only when finetuning from a pretrained model. Defaults to 5.
         finetune_lr_factor (float): Learning rate reduction factor for stage 2 of finetuning (full network training). Defaults to 0.1.
+        source_dataset (str): Dataset the pretrained model was trained on (used when finetune is set). Defaults to "iridia_af".
     
     Returns:
         dict: Aggregated performance metrics across all iterations/folds.
@@ -181,7 +182,7 @@ def train_model(filename, dataset_name, model_type, dataset_id, cv_mode="kfold",
         iteration_name = "run"
 
     if finetune:
-        best_params = get_best_params("iridia_af", dataset_id)
+        best_params = get_best_params(source_dataset, dataset_id)
     else:
         best_params = get_best_params(dataset_name, dataset_id)
     if best_params is None:
@@ -212,7 +213,7 @@ def train_model(filename, dataset_name, model_type, dataset_id, cv_mode="kfold",
 
     if model_type in ["cnn_bigru", "cnn_bilstm", "cnn_transf"]:
         if finetune:
-            source_params = get_parameters(filename, "iridia_af")
+            source_params = get_parameters(filename, source_dataset)
             source_input_size_samples = int(source_params["input_window_size"] * 60 * source_params["sampling_rate"])
             adaptive_pool_basis = source_input_size_samples
         else:
@@ -281,7 +282,7 @@ def train_model(filename, dataset_name, model_type, dataset_id, cv_mode="kfold",
             model = get_model(model_type=model_type, device=device, base_out_channels=base_out_channels, base_kernel_size=base_kernel_size, adaptive_pool_size=adaptive_pool_size, dropout_rate=dropout_rate)
 
             if finetune:
-                model_path = list((RESULTS_DIR /"iridia_af"/model_type).glob(f"final/hor{horizon}_inp{input_size_minutes}_*/model.pt"))
+                model_path = list((RESULTS_DIR / source_dataset / model_type).glob(f"final/hor{horizon}_inp{input_size_minutes}_*/model.pt"))
                 if not model_path:
                     pretrained_found = False
                     print(f"✗ No final model found for {dataset_id}, skipping.\n")
@@ -687,7 +688,7 @@ def train_model(filename, dataset_name, model_type, dataset_id, cv_mode="kfold",
 
     return final_metrics
 
-def train_multiple_models(dataset_name, model_type, start_idx, end_idx, cv_mode="kfold", num_runs=1, folds_to_run=None, balance_all=False, balance_train=True, finetune=False, finetune_head_epochs=5, finetune_lr_factor=0.1):
+def train_multiple_models(dataset_name, model_type, start_idx, end_idx, cv_mode="kfold", num_runs=1, folds_to_run=None, balance_all=False, balance_train=True, finetune=False, finetune_head_epochs=5, finetune_lr_factor=0.1, source_dataset="iridia_af"):
     """
     Train model using one or more datasets using either k-fold cross-validation or a single train-validation-test split.
     
@@ -708,6 +709,7 @@ def train_multiple_models(dataset_name, model_type, start_idx, end_idx, cv_mode=
         finetune (bool): If True, fine-tune from pretrained model instead of training from scratch. Defaults to False.
         finetune_head_epochs (int): Number of epochs to train head-only when finetuning from a pretrained model. Defaults to 5.
         finetune_lr_factor (float): Learning rate reduction factor for stage 2 of finetuning (full network training). Defaults to 0.1.
+        source_dataset (str): Dataset the pretrained model was trained on (used when finetune is set). Defaults to "iridia_af".
     """
 
     filenames = get_filenames(dataset_name)
@@ -727,9 +729,13 @@ def train_multiple_models(dataset_name, model_type, start_idx, end_idx, cv_mode=
     print(f"\n{'='*70}")
     print(f"Selected files: {selected_files}")
     print(f"Total files to process: {len(selected_files)}")
-    print(f"Dataset: {dataset_name}")
     print(f"Model: {model_type}")
     print(f"Training type: {'Fine-tuning' if finetune else 'From scratch'}")
+    if finetune:
+        print(f"Source dataset: {source_dataset}")
+        print(f"Target dataset: {dataset_name}")
+    else:
+        print(f"Dataset: {dataset_name}")
     print(f"CV mode: {cv_mode}")
     print(f"{'='*70}\n")
     
@@ -738,7 +744,7 @@ def train_multiple_models(dataset_name, model_type, start_idx, end_idx, cv_mode=
         dataset_id = filename.replace(".csv", "").replace("dataset_", "")
         
         try:
-            train_model(filename=filename, dataset_name=dataset_name, model_type=model_type, dataset_id=dataset_id, cv_mode=cv_mode, num_runs=num_runs, folds_to_run=folds_to_run, balance_all=balance_all, balance_train=balance_train, finetune=finetune, finetune_head_epochs=finetune_head_epochs, finetune_lr_factor=finetune_lr_factor)
+            train_model(filename=filename, dataset_name=dataset_name, model_type=model_type, dataset_id=dataset_id, cv_mode=cv_mode, num_runs=num_runs, folds_to_run=folds_to_run, balance_all=balance_all, balance_train=balance_train, finetune=finetune, finetune_head_epochs=finetune_head_epochs, finetune_lr_factor=finetune_lr_factor, source_dataset=source_dataset)
             print(f"\n✓ Completed training on dataset [{idx} out of {len(selected_files)}]\n")
             
         except Exception as e:
@@ -751,7 +757,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run model on ECG datasets")
     parser.add_argument("--start-idx", type=int, default=0, help="Start index for filenames")
     parser.add_argument("--end-idx", type=int, default=None, help="End index for filenames (None = to end)")
-    parser.add_argument("--dataset-name", type=str, default="iridia_af", help="Dataset name")
+    parser.add_argument("--dataset-name", type=str, default="iridia_af", choices=VALID_DATASET_NAMES, help="Dataset name")
     parser.add_argument("--model-type", type=str, default="cnn", choices=VALID_MODELS, help="Model")
     parser.add_argument("--cv-mode", type=str, default="kfold", choices=["kfold", "loocv", "single", "final"], help="Cross-validation mode - kfold, loocv, single, or final")
     parser.add_argument("--num-runs", type=int, default=1, help="Number of runs for stability testing (use with --no-cv)")
@@ -761,10 +767,11 @@ if __name__ == "__main__":
     parser.add_argument("--finetune", action="store_true", help="Fine-tune from pretrained model")
     parser.add_argument("--finetune-head-epochs", type=int, default=5, help="Number of epochs for stage 1 head-only training before unfreezing full network")
     parser.add_argument("--finetune-lr-factor", type=float, default=0.1, help="LR multiplier for stage 2 full network fine-tuning (e.g. 0.1 means 1/10th of base LR)")
+    parser.add_argument("--source-dataset", type=str, default="iridia_af", choices=VALID_DATASET_NAMES, help="Dataset the pretrained model was trained on (used when --finetune is set)")
     
     args = parser.parse_args()
 
     if args.finetune and args.cv_mode == "final":
         parser.error("--finetune and --cv-mode final cannot be used together")
 
-    train_multiple_models(args.dataset_name, args.model_type, args.start_idx, args.end_idx, args.cv_mode, args.num_runs, args.folds, args.balance_all, args.balance_train, finetune=args.finetune, finetune_head_epochs=args.finetune_head_epochs, finetune_lr_factor=args.finetune_lr_factor)
+    train_multiple_models(args.dataset_name, args.model_type, args.start_idx, args.end_idx, args.cv_mode, args.num_runs, args.folds, args.balance_all, args.balance_train, finetune=args.finetune, finetune_head_epochs=args.finetune_head_epochs, finetune_lr_factor=args.finetune_lr_factor, source_dataset=args.source_dataset)
